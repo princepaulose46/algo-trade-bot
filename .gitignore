@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+env/
+venv/
+*.egg-info/
+.pytest_cache/
+
+# System
+.DS_Store
+Thumbs.db
+
+# Logs (keep directory structure)
+logs/*.log
+!logs/.gitkeep
