@@ -2,9 +2,13 @@ name: CoinDCX Momentum Scanner & Paper Bot
 
 on:
   schedule:
-    # Runs every 15 minutes (aligned with 15m candle completion)
-    - cron: '*/15 * * * *'
+    # GitHub's fastest supported cron trigger is every 5 minutes
+    - cron: '*/5 * * * *'
   workflow_dispatch: # Allows manual trigger from GitHub Actions UI
+
+concurrency:
+  group: momentum-bot
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -34,8 +38,13 @@ jobs:
         run: |
           python -m unittest discover tests
 
-      - name: Run Momentum Scanner
+      - name: Run Momentum Scans (2-Minute Intervals)
         run: |
+          echo "=== Pass 1: Immediate Scan ==="
+          python app.py --mode scan
+          echo "Waiting 2 minutes for next intra-cycle check..."
+          sleep 120
+          echo "=== Pass 2: 2-Minute Scan ==="
           python app.py --mode scan
 
       - name: Print Performance Audit Report
