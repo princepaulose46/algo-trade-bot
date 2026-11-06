@@ -46,6 +46,7 @@ class PositionSizer:
         current_open_trades_count: int,
         daily_loss_accumulated: float,
         start_of_day_equity: float,
+        side: str = "LONG",
         market_min_qty: float = 0.0001,
         qty_step: float = 0.0001,
     ) -> PositionSizingResult:
@@ -72,10 +73,15 @@ class PositionSizer:
         if entry_price <= 0.0 or stop_price <= 0.0:
             return PositionSizingResult(valid=False, reason="INVALID_PRICE")
 
-        # 4. Long trade risk per unit
-        risk_per_unit = entry_price - stop_price
-        if risk_per_unit <= 0.0:
-            return PositionSizingResult(valid=False, reason="STOP_ABOVE_OR_EQUAL_TO_ENTRY")
+        # 4. Risk per unit depending on trade side
+        if side.upper() == "SHORT":
+            risk_per_unit = stop_price - entry_price
+            if risk_per_unit <= 0.0:
+                return PositionSizingResult(valid=False, reason="STOP_BELOW_OR_EQUAL_TO_ENTRY")
+        else:
+            risk_per_unit = entry_price - stop_price
+            if risk_per_unit <= 0.0:
+                return PositionSizingResult(valid=False, reason="STOP_ABOVE_OR_EQUAL_TO_ENTRY")
 
         # 5. Risk amount
         risk_amount = equity * self.config.risk_fraction

@@ -22,16 +22,16 @@ logger = logging.getLogger("strategy.scanner")
 
 @dataclass
 class ScannerConfig:
-    min_change_24h_pct: float = 5.0
-    min_change_15m_pct: float = 1.0  # Momentum > 0 and >= threshold
-    min_relative_volume: float = 2.0
-    rsi_min: float = 55.0
-    require_above_vwap: bool = True
-    require_above_ema50: bool = True
+    min_change_24h_pct: float = 0.0
+    min_change_15m_pct: float = 0.0
+    min_relative_volume: float = 0.7
+    rsi_min: float = 42.0
+    require_above_vwap: bool = False
+    require_above_ema50: bool = False
     use_open_interest_filter: bool = False
-    lookback_range_candles: int = 20
-    max_distance_from_ema50_pct: float = 6.0
-    cooldown_candles_after_failed: int = 8
+    lookback_range_candles: int = 10
+    max_distance_from_ema50_pct: float = 8.0
+    cooldown_candles_after_failed: int = 6
     use_rolling_24h_calculation: bool = False
 
 
@@ -154,23 +154,23 @@ class MomentumScanner:
         if not latest.is_valid():
             return False, metrics, "INVALID_LATEST_CANDLE"
 
-        # 2. 24h change >= +5.0%
+        # 2. 24h change check (if min_change_24h_pct configured)
         change_24h, method = self.calculate_24h_change(ticker, candles)
         metrics["change_24h_pct"] = change_24h
         metrics["calculation_method"] = method
-        if change_24h < self.config.min_change_24h_pct:
+        if self.config.min_change_24h_pct > 0.0 and change_24h < self.config.min_change_24h_pct:
             return False, metrics, "CHANGE_24H_BELOW_MIN"
 
-        # 3. 15m momentum > 0
+        # 3. 15m momentum check (if min_change_15m_pct configured)
         momentum_15m = calculate_15m_momentum(candles)
         metrics["change_15m_pct"] = momentum_15m or 0.0
-        if momentum_15m is None or momentum_15m <= 0.0:
+        if self.config.min_change_15m_pct > 0.0 and (momentum_15m is None or momentum_15m < self.config.min_change_15m_pct):
             return False, metrics, "MOMENTUM_15M_NOT_POSITIVE"
 
-        # 4. Relative volume >= 2.0
+        # 4. Relative volume check
         rvol = calculate_relative_volume(candles, period=20)
-        metrics["relative_volume"] = rvol if rvol is not None else 0.0
-        if rvol is None or rvol < self.config.min_relative_volume:
+        metrics["relative_volume"] = rvol if rvol is not None else 1.0
+        if rvol is not None and rvol < self.config.min_relative_volume:
             return False, metrics, "INSUFFICIENT_RELATIVE_VOLUME"
 
         # 5. Spread <= max

@@ -28,16 +28,16 @@ universe:
   min_history_candles: 60
 
 scanner:
-  min_change_24h_pct: 5.0
-  min_change_15m_pct: 1.0
-  min_relative_volume: 2.0
-  rsi_min: 55.0
-  require_above_vwap: true
-  require_above_ema50: true
+  min_change_24h_pct: 0.0
+  min_change_15m_pct: 0.0
+  min_relative_volume: 0.7
+  rsi_min: 42.0
+  require_above_vwap: false
+  require_above_ema50: false
   use_open_interest_filter: false
-  lookback_range_candles: 20
-  max_distance_from_ema50_pct: 6.0
-  cooldown_candles_after_failed: 8
+  lookback_range_candles: 10
+  max_distance_from_ema50_pct: 8.0
+  cooldown_candles_after_failed: 6
 
 paper:
   starting_equity_inr: 20000.0

@@ -183,7 +183,8 @@ class BacktestRunner:
                         entry_price=sig.entry_price,
                         stop_price=sig.stop_price,
                         entry_timestamp_ms=curr_candle.timestamp_ms,
-                        strategy_version="momentum_v1",
+                        strategy_version=sig.signal_type,
+                        side=sig.side,
                     )
                     if not trade:
                         candidate.decision = "FILTERED"

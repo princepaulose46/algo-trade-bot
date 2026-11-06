@@ -134,9 +134,24 @@ def find_recent_range_high(candles: List[Candle], lookback: int = 20) -> Optiona
     return max(c.high for c in prior)
 
 
+def find_recent_range_low(candles: List[Candle], lookback: int = 20) -> Optional[float]:
+    """Find lowest low over past lookback candles, excluding the latest candle."""
+    if len(candles) < lookback + 1:
+        return None
+    prior = candles[-lookback - 1 : -1]
+    return min(c.low for c in prior)
+
+
 def find_swing_low(candles: List[Candle], lookback: int = 10) -> Optional[float]:
     """Find recent swing low over the consolidation / retest period."""
     if len(candles) < lookback:
         return min(c.low for c in candles) if candles else None
     return min(c.low for c in candles[-lookback:])
+
+
+def find_swing_high(candles: List[Candle], lookback: int = 10) -> Optional[float]:
+    """Find recent swing high over the consolidation / retest period."""
+    if len(candles) < lookback:
+        return max(c.high for c in candles) if candles else None
+    return max(c.high for c in candles[-lookback:])
 

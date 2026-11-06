@@ -345,6 +345,7 @@ class MomentumBot:
                     stop_price=signal_res.stop_price,
                     entry_timestamp_ms=now_ms,
                     strategy_version=signal_res.signal_type,
+                    side=signal_res.side,
                     market_min_qty=min_qty,
                     qty_step=step_size,
                 )

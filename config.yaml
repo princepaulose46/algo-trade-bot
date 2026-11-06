@@ -5,32 +5,33 @@ app:
 
 universe:
   market_type: "all" # "all", "perpetual", or "spot"
-  min_quote_volume_24h: 50000
-  max_spread_pct: 0.50
+  min_quote_volume_24h: 20000
+  max_spread_pct: 0.60
   symbols_allowlist: []
   symbols_blocklist: []
-  min_history_candles: 60
+  min_history_candles: 55
 
 scanner:
-  min_change_24h_pct: 5.0
-  min_change_15m_pct: 1.0
-  min_relative_volume: 2.0
-  rsi_min: 55.0
-  require_above_vwap: true
-  require_above_ema50: true
+  strategy_name: "trend_pullback_v2" # famous EMA 20/50 + RSI Confluence
+  min_change_24h_pct: 0.0
+  min_change_15m_pct: 0.0
+  min_relative_volume: 0.7
+  rsi_min: 42.0
+  require_above_vwap: false
+  require_above_ema50: false
   use_open_interest_filter: false
-  lookback_range_candles: 20
-  max_distance_from_ema50_pct: 6.0
-  cooldown_candles_after_failed: 8
+  lookback_range_candles: 10
+  max_distance_from_ema50_pct: 8.0
+  cooldown_candles_after_failed: 6
 
 paper:
   starting_equity_inr: 20000.0
   risk_fraction: 0.005
-  max_open_trades: 3
-  max_daily_loss_fraction: 0.01
+  max_open_trades: 4
+  max_daily_loss_fraction: 0.015
   max_notional_fraction_equity: 1.0
   simulated_leverage: 1
-  target_r_multiple: 2.0
+  target_r_multiple: 1.5
   max_holding_hours: 24
   trailing_stop_enabled: true
   trailing_stop_activation_r: 1.0
@@ -45,4 +46,3 @@ reports:
   candidates_file: "candidates.jsonl"
   trades_file: "trades.jsonl"
   daily_summary_file: "daily_summary.json"
-

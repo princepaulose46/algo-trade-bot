@@ -177,7 +177,8 @@ class PaperEngine:
         entry_price: float,
         stop_price: float,
         entry_timestamp_ms: int,
-        strategy_version: str = "momentum_v1",
+        strategy_version: str = "ema_pullback_v2",
+        side: str = "LONG",
         market_min_qty: float = 0.0001,
         qty_step: float = 0.0001,
     ) -> Tuple[Optional[PaperTrade], Optional[str]]:
@@ -187,6 +188,8 @@ class PaperEngine:
         ).strftime("%Y-%m-%d")
         self.check_day_reset(now_date)
 
+        is_short = (side.upper() == "SHORT")
+
         # Calculate position sizing and guardrails
         sizing = self.sizer.calculate_sizing(
             equity=self.current_equity,
@@ -195,6 +198,7 @@ class PaperEngine:
             current_open_trades_count=len(self.open_trades),
             daily_loss_accumulated=self.daily_loss_accumulated,
             start_of_day_equity=self.start_of_day_equity,
+            side=side,
             market_min_qty=market_min_qty,
             qty_step=qty_step,
         )
@@ -202,16 +206,19 @@ class PaperEngine:
         if not sizing.valid:
             return None, sizing.reason
 
-        # Initial target: 2R (Section 6.3)
-        risk_per_unit = entry_price - stop_price
-        target_price = entry_price + (self.target_r_multiple * risk_per_unit)
+        # Initial target: target_r_multiple * risk
+        risk_per_unit = (stop_price - entry_price) if is_short else (entry_price - stop_price)
+        if is_short:
+            target_price = entry_price - (self.target_r_multiple * risk_per_unit)
+        else:
+            target_price = entry_price + (self.target_r_multiple * risk_per_unit)
 
         trade = PaperTrade(
             trade_id=self.next_trade_id(),
             strategy_version=strategy_version,
             symbol=symbol,
             market_type=market_type,
-            side="LONG",
+            side=side.upper(),
             detected_at=detected_at,
             entered_at=entered_at,
             entry_price=entry_price,
@@ -270,14 +277,16 @@ class PaperEngine:
             if trade.symbol != symbol:
                 continue
 
-            # Update MFE / MAE and reached percentages
-            if c_high > trade.highest_price_seen:
-                trade.highest_price_seen = c_high
-            if c_low < trade.lowest_price_seen:
-                trade.lowest_price_seen = c_low
+            is_short = (trade.side == "SHORT")
 
-            mfe = ((trade.highest_price_seen - trade.entry_price) / trade.entry_price) * 100.0
-            mae = ((trade.lowest_price_seen - trade.entry_price) / trade.entry_price) * 100.0
+            # Update MFE / MAE and reached percentages
+            if is_short:
+                mfe = ((trade.entry_price - trade.lowest_price_seen) / trade.entry_price) * 100.0
+                mae = -((trade.highest_price_seen - trade.entry_price) / trade.entry_price) * 100.0
+            else:
+                mfe = ((trade.highest_price_seen - trade.entry_price) / trade.entry_price) * 100.0
+                mae = ((trade.lowest_price_seen - trade.entry_price) / trade.entry_price) * 100.0
+
             trade.mfe_pct = max(trade.mfe_pct, mfe)
             trade.mae_pct = min(trade.mae_pct, mae)
 
@@ -291,8 +300,12 @@ class PaperEngine:
             # Check conservative same-candle hit rule (Section 6.3)
             # Check stop hit using current stop_price BEFORE any same-candle trailing adjustment
             current_stop = trade.stop_price
-            hit_stop = c_low <= current_stop
-            hit_target = c_high >= trade.target_price
+            if is_short:
+                hit_stop = c_high >= current_stop
+                hit_target = c_low <= trade.target_price
+            else:
+                hit_stop = c_low <= current_stop
+                hit_target = c_high >= trade.target_price
 
             exit_price: Optional[float] = None
             exit_reason: Optional[str] = None
@@ -314,14 +327,24 @@ class PaperEngine:
                 exit_reason = "TARGET"
             else:
                 # If neither stop nor target was hit, evaluate trailing stop move
-                risk_per_unit = trade.entry_price - current_stop
-                if self.trailing_stop_enabled and not trade.trailing_stop_active:
-                    if (trade.highest_price_seen - trade.entry_price) >= (self.trailing_stop_activation_r * risk_per_unit):
-                        trade.trailing_stop_active = True
-                        new_stop = trade.entry_price
-                        if new_stop > trade.stop_price:
-                            trade.stop_price = new_stop
-                            logger.info("Trade %s: Trailing stop moved to entry %.4f", trade.trade_id, new_stop)
+                if is_short:
+                    risk_per_unit = current_stop - trade.entry_price
+                    if self.trailing_stop_enabled and not trade.trailing_stop_active and risk_per_unit > 0:
+                        if (trade.entry_price - trade.lowest_price_seen) >= (self.trailing_stop_activation_r * risk_per_unit):
+                            trade.trailing_stop_active = True
+                            new_stop = trade.entry_price
+                            if new_stop < trade.stop_price:
+                                trade.stop_price = new_stop
+                                logger.info("Trade %s (SHORT): Trailing stop moved to entry %.4f", trade.trade_id, new_stop)
+                else:
+                    risk_per_unit = trade.entry_price - current_stop
+                    if self.trailing_stop_enabled and not trade.trailing_stop_active and risk_per_unit > 0:
+                        if (trade.highest_price_seen - trade.entry_price) >= (self.trailing_stop_activation_r * risk_per_unit):
+                            trade.trailing_stop_active = True
+                            new_stop = trade.entry_price
+                            if new_stop > trade.stop_price:
+                                trade.stop_price = new_stop
+                                logger.info("Trade %s (LONG): Trailing stop moved to entry %.4f", trade.trade_id, new_stop)
 
                 # Time stop check (Section 6.3)
                 holding_hours = (c_ts - trade.entry_timestamp_ms) / (1000.0 * 3600.0)
@@ -350,8 +373,11 @@ class PaperEngine:
         trade.exit_reason = reason
         trade.status = "CLOSED"
 
-        # Gross P&L: quantity * (exit_price - entry_price)
-        gross_pnl = trade.quantity * (exit_price - trade.entry_price)
+        # Gross P&L based on trade side
+        if trade.side == "SHORT":
+            gross_pnl = trade.quantity * (trade.entry_price - exit_price)
+        else:
+            gross_pnl = trade.quantity * (exit_price - trade.entry_price)
         trade.gross_pnl = round(gross_pnl, 2)
 
         # Total fees and slippage across both entry & exit
