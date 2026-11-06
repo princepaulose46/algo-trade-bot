@@ -174,11 +174,36 @@ class MomentumBot:
         now_ms = int(now_dt.timestamp() * 1000)
 
         # 1. Fetch market data
-        try:
-            tickers = mock_tickers if mock_tickers is not None else self.client.get_tickers()
-        except Exception as exc:
-            logging.error("Failed to fetch tickers: %s. Skipping iteration safely.", exc)
-            return {"status": "error", "message": str(exc)}
+        tickers: List[Dict[str, Any]] = []
+        if mock_tickers is not None:
+            tickers = mock_tickers
+        else:
+            try:
+                tickers = self.client.get_tickers()
+            except Exception as exc:
+                logging.error("Failed to fetch tickers: %s. Continuing with futures fallback.", exc)
+                tickers = []
+
+            # If perpetual or all, also load dedicated CoinDCX perpetual futures instruments
+            if self.universe_config.market_type.lower() in ("perpetual", "all"):
+                try:
+                    futures_instruments = self.client.get_futures_active_instruments()
+                    for inst in futures_instruments:
+                        sym = inst.get("symbol") or inst.get("pair")
+                        if sym and not any((t.get("market") == sym or t.get("symbol") == sym) for t in tickers):
+                            tickers.append({
+                                "market": sym,
+                                "symbol": sym,
+                                "last_price": 0.0,
+                                "change_24_hour": 0.0,
+                                "volume": 0.0,
+                                "bid": 0.0,
+                                "ask": 0.0,
+                                "is_futures": True,
+                            })
+                    logging.info("Included %d perpetual futures instruments.", len(futures_instruments))
+                except Exception as exc:
+                    logging.warning("Failed to fetch futures active instruments: %s", exc)
 
         # Synthesize registry from tickers / market details
         registry = SymbolRegistry.from_tickers(tickers)
@@ -186,6 +211,7 @@ class MomentumBot:
 
         # 2. Universe filtering (Section 5.1)
         eligible_symbols, exclusions = self.universe_filter.filter_universe(tickers, registry)
+        logging.info("Universe filter: %d eligible, %d excluded", len(eligible_symbols), len(exclusions))
 
         ticker_map = {t.get("market") or t.get("symbol"): t for t in tickers}
         new_candidates: List[CandidateRecord] = []
@@ -222,6 +248,16 @@ class MomentumBot:
                 continue
 
             latest_candle = candles[-1]
+
+            # Populate price and rolling 24h metrics from candles if ticker field is missing
+            if float(ticker.get("last_price") or 0.0) <= 0.0:
+                ticker["last_price"] = latest_candle.close
+
+            if float(ticker.get("change_24_hour") or 0.0) == 0.0 and len(candles) >= 10:
+                ref_idx = max(0, len(candles) - 96)
+                ref_price = candles[ref_idx].open
+                if ref_price > 0:
+                    ticker["change_24_hour"] = round(((latest_candle.close - ref_price) / ref_price) * 100.0, 2)
 
             # 4. If symbol already has an open paper trade, evaluate exits first!
             closed_trades = self.engine.update_and_evaluate_exits(latest_candle, symbol)

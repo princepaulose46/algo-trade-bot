@@ -126,6 +126,9 @@ class CandleCache:
                 ts = int(item.get("time") or item.get("timestamp") or 0)
                 if ts <= 0:
                     continue
+                # Normalize seconds to milliseconds epoch if needed
+                if 0 < ts < 10000000000:
+                    ts *= 1000
 
                 open_p = float(item.get("open", 0))
                 high_p = float(item.get("high", 0))

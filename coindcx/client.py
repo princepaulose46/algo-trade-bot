@@ -148,10 +148,11 @@ class CoinDCXClient:
         end_time: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
         """Fetch candlestick bars.
-        Endpoint: GET https://public.coindcx.com/market_data/candles
+        Endpoint: GET https://public.coindcx.com/market_data/candles/
         Parameters: pair, interval, limit, startTime, endTime
+        Note: The trailing slash is strictly required by CoinDCX.
         """
-        url = f"{self.public_base}/market_data/candles"
+        url = f"{self.public_base}/market_data/candles/"
         params = {
             "pair": pair,
             "interval": interval,
@@ -163,6 +164,20 @@ class CoinDCXClient:
         if not isinstance(data, list):
             raise ValueError(f"Expected list of candles for {pair}, got {type(data)}")
         return data
+
+    def get_futures_active_instruments(self) -> List[Dict[str, Any]]:
+        """Fetch active perpetual futures instruments from CoinDCX.
+        Endpoint: GET https://api.coindcx.com/exchange/v1/derivatives/futures/data/active_instruments
+        """
+        url = f"{self.api_base}/exchange/v1/derivatives/futures/data/active_instruments"
+        try:
+            data = self._http_get(url)
+            if isinstance(data, list):
+                return data
+            return []
+        except Exception as exc:
+            logger.warning("Failed to fetch futures active_instruments: %s", exc)
+            return []
 
     def get_orderbook(self, pair: str) -> Dict[str, Any]:
         """Fetch orderbook snapshot for spread & liquidity calculation.

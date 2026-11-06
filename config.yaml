@@ -4,9 +4,9 @@ app:
   log_level: "INFO"
 
 universe:
-  market_type: "perpetual" # "perpetual" or "spot" - keep separate
-  min_quote_volume_24h: 100000
-  max_spread_pct: 0.20
+  market_type: "all" # "all", "perpetual", or "spot"
+  min_quote_volume_24h: 50000
+  max_spread_pct: 0.50
   symbols_allowlist: []
   symbols_blocklist: []
   min_history_candles: 60

@@ -59,7 +59,7 @@ class UniverseFilter:
         detected_type = (
             metadata.market_type if metadata else SymbolRegistry.classify_market_type(symbol)
         )
-        if detected_type.lower() != self.config.market_type.lower():
+        if self.config.market_type.lower() != "all" and detected_type.lower() != self.config.market_type.lower():
             return False, "MARKET_TYPE_MISMATCH", {
                 "expected": self.config.market_type,
                 "actual": detected_type,
@@ -74,14 +74,12 @@ class UniverseFilter:
             return False, "MISSING_TICKER", {}
 
         # 5. Volume check (in quote asset)
-        # CoinDCX ticker returns 'volume' (often in target currency) or quote volume
-        # We compute quote_volume = volume * last_price if volume is in base
         last_price = float(ticker.get("last_price") or 0.0)
         volume = float(ticker.get("volume") or 0.0)
-        # Approximate 24h quote volume
         quote_volume = float(ticker.get("quote_volume") or (volume * last_price))
 
-        if quote_volume < self.config.min_quote_volume_24h:
+        # Enforce volume threshold if volume data is available in ticker
+        if quote_volume > 0.0 and quote_volume < self.config.min_quote_volume_24h:
             return False, "INSUFFICIENT_VOLUME", {
                 "quote_volume": round(quote_volume, 2),
                 "required": self.config.min_quote_volume_24h,
@@ -90,16 +88,16 @@ class UniverseFilter:
         # 6. Bid/Ask Spread check
         bid = float(ticker.get("bid") or 0.0)
         ask = float(ticker.get("ask") or 0.0)
-        if bid <= 0.0 or ask <= 0.0 or ask < bid:
-            # Stale prices or missing depth
-            return False, "INVALID_BID_ASK", {"bid": bid, "ask": ask}
-
-        spread_pct = ((ask - bid) / ask) * 100.0
-        if spread_pct > self.config.max_spread_pct:
-            return False, "EXCESSIVE_SPREAD", {
-                "spread_pct": round(spread_pct, 4),
-                "max_allowed": self.config.max_spread_pct,
-            }
+        if bid > 0.0 and ask > 0.0 and ask >= bid:
+            spread_pct = ((ask - bid) / ask) * 100.0
+            if spread_pct > self.config.max_spread_pct:
+                return False, "EXCESSIVE_SPREAD", {
+                    "spread_pct": round(spread_pct, 4),
+                    "max_allowed": self.config.max_spread_pct,
+                }
+        else:
+            # If bid/ask not provided in ticker feed (common in derivatives), use nominal spread
+            spread_pct = 0.05
 
         # 7. Candle history depth check
         if candle_count < self.config.min_history_candles:
