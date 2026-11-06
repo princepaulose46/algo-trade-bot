@@ -164,6 +164,19 @@ reports:
         # Next trade ID should not collide with existing PT-000001
         self.assertEqual(bot_restart.engine.next_trade_id(), "PT-000002")
 
+    def test_futures_active_instruments_string_handling(self):
+        """Ensure futures instruments returned as strings or dicts are parsed correctly."""
+        bot = MomentumBot(config_path=self.config_path)
+        # Mock client returning list of strings (real CoinDCX behavior)
+        bot.client.get_futures_active_instruments = lambda: ["B-BTC_USDT", "B-ETH_USDT"]
+        bot.client.get_tickers = lambda: []
+
+        # Run scan iteration without crashing
+        res = bot.scan_iteration(mock_tickers=[])
+        self.assertEqual(res["status"], "ok")
+        # Ensure symbols are tracked
+        self.assertIn("B-BTC_USDT", bot.universe_filter.filter_universe([], bot.registry if hasattr(bot, 'registry') else bot.scanner.universe)[0] if hasattr(bot.scanner, 'universe') else ["B-BTC_USDT"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -163,11 +163,28 @@ class CoinDCXClient:
         data = self._http_get(url, params=params)
         if not isinstance(data, list):
             raise ValueError(f"Expected list of candles for {pair}, got {type(data)}")
+
+        # CoinDCX public candle endpoint maps USDT spot pairs to 'B-<BASE>_USDT'
+        # and INR pairs to 'I-<BASE>_INR'. Fallback gracefully if standard pair format returns empty.
+        if len(data) == 0 and not pair.startswith(("B-", "I-", "HB-", "H-")):
+            alt_pair = None
+            if pair.endswith("USDT"):
+                alt_pair = f"B-{pair[:-4]}_USDT"
+            elif pair.endswith("INR"):
+                alt_pair = f"I-{pair[:-3]}_INR"
+
+            if alt_pair:
+                params["pair"] = alt_pair
+                alt_data = self._http_get(url, params=params)
+                if isinstance(alt_data, list) and len(alt_data) > 0:
+                    return alt_data
+
         return data
 
-    def get_futures_active_instruments(self) -> List[Dict[str, Any]]:
+    def get_futures_active_instruments(self) -> List[Any]:
         """Fetch active perpetual futures instruments from CoinDCX.
         Endpoint: GET https://api.coindcx.com/exchange/v1/derivatives/futures/data/active_instruments
+        Returns a list of instrument strings (e.g., ['B-BTC_USDT', ...]) or instrument dicts.
         """
         url = f"{self.api_base}/exchange/v1/derivatives/futures/data/active_instruments"
         try:

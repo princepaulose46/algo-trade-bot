@@ -1,7 +1,7 @@
 {
   "date_utc": "2026-11-06",
   "scanner": {
-    "markets_checked": 981,
+    "markets_checked": 0,
     "candidates_detected": 0,
     "entered_paper_trades": 0,
     "filtered_candidates": 0
@@ -12,9 +12,9 @@
     "wins": 0,
     "losses": 0,
     "win_rate_pct": 0.0,
-    "gross_pnl": 0,
-    "fees_and_slippage": 0,
-    "net_pnl": 0,
+    "gross_pnl": 0.0,
+    "fees_and_slippage": 0.0,
+    "net_pnl": 0.0,
     "ending_equity": 20000.0,
     "max_drawdown_pct": 0.0
   },

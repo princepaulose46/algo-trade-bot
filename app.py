@@ -189,7 +189,13 @@ class MomentumBot:
                 try:
                     futures_instruments = self.client.get_futures_active_instruments()
                     for inst in futures_instruments:
-                        sym = inst.get("symbol") or inst.get("pair")
+                        if isinstance(inst, str):
+                            sym = inst
+                        elif isinstance(inst, dict):
+                            sym = inst.get("symbol") or inst.get("pair") or inst.get("instrument")
+                        else:
+                            continue
+
                         if sym and not any((t.get("market") == sym or t.get("symbol") == sym) for t in tickers):
                             tickers.append({
                                 "market": sym,
@@ -214,6 +220,32 @@ class MomentumBot:
         logging.info("Universe filter: %d eligible, %d excluded", len(eligible_symbols), len(exclusions))
 
         ticker_map = {t.get("market") or t.get("symbol"): t for t in tickers}
+
+        # Prioritize evaluation order: open trades first, then high volume markets & major crypto futures
+        open_trade_symbols = {t.symbol for t in self.engine.open_trades.values()}
+
+        def _symbol_priority(sym: str) -> float:
+            if sym in open_trade_symbols:
+                return 1e12  # Absolute highest priority to ensure exits & trailing stops are always evaluated
+
+            t = ticker_map.get(sym, {})
+            qv = float(t.get("quote_volume") or 0.0)
+            if qv <= 0:
+                p = float(t.get("last_price") or 0.0)
+                v = float(t.get("volume") or 0.0)
+                qv = p * v
+            if qv <= 0 and sym.startswith("B-"):
+                clean = sym[2:].replace("_USDT", "")
+                if clean in ("BTC", "ETH", "SOL", "BNB", "XRP", "DOGE", "ADA", "AVAX", "SUI", "PEPE", "LINK", "NEAR"):
+                    qv = 1e9  # Top tier priority
+                else:
+                    qv = 1000.0
+            return qv
+
+        eligible_symbols.sort(key=_symbol_priority, reverse=True)
+        # Cap evaluation to top liquid candidates per scan cycle to maintain low latency (<5s) and avoid rate limits
+        eligible_symbols = eligible_symbols[:60]
+
         new_candidates: List[CandidateRecord] = []
         new_trades: List[PaperTrade] = []
 

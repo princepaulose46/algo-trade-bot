@@ -83,10 +83,27 @@ class PaperTrade:
             "reached_10pct": self.reached_10pct,
             "reached_20pct": self.reached_20pct,
             "reached_50pct": self.reached_50pct,
+            "entry_timestamp_ms": self.entry_timestamp_ms,
+            "highest_price_seen": round(self.highest_price_seen, 8),
+            "lowest_price_seen": round(self.lowest_price_seen, 8),
+            "trailing_stop_active": self.trailing_stop_active,
         }
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> PaperTrade:
+        entry_ts = int(data.get("entry_timestamp_ms") or 0)
+        if entry_ts <= 0 and data.get("entered_at"):
+            try:
+                dt = datetime.datetime.fromisoformat(data["entered_at"].replace("Z", "+00:00"))
+                entry_ts = int(dt.timestamp() * 1000)
+            except Exception:
+                entry_ts = int(datetime.datetime.now(datetime.timezone.utc).timestamp() * 1000)
+
+        entry_px = float(data["entry_price"])
+        highest_seen = float(data.get("highest_price_seen") or entry_px)
+        lowest_seen = float(data.get("lowest_price_seen") or entry_px)
+        trailing_active = bool(data.get("trailing_stop_active", False))
+
         trade = cls(
             trade_id=data["trade_id"],
             strategy_version=data.get("strategy_version", "momentum_v1"),
@@ -95,7 +112,7 @@ class PaperTrade:
             side=data.get("side", "LONG"),
             detected_at=data.get("detected_at", ""),
             entered_at=data.get("entered_at", ""),
-            entry_price=float(data["entry_price"]),
+            entry_price=entry_px,
             stop_price=float(data["stop_price"]),
             target_price=float(data["target_price"]),
             quantity=float(data["quantity"]),
@@ -117,9 +134,11 @@ class PaperTrade:
             reached_10pct=bool(data.get("reached_10pct", False)),
             reached_20pct=bool(data.get("reached_20pct", False)),
             reached_50pct=bool(data.get("reached_50pct", False)),
+            entry_timestamp_ms=entry_ts,
+            highest_price_seen=highest_seen,
+            lowest_price_seen=lowest_seen,
+            trailing_stop_active=trailing_active,
         )
-        trade.highest_price_seen = trade.entry_price
-        trade.lowest_price_seen = trade.entry_price
         return trade
 
 
