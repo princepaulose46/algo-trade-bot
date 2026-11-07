@@ -1,22 +1,22 @@
 {
   "date_utc": "2026-11-07",
   "scanner": {
-    "markets_checked": 1486,
-    "candidates_detected": 243,
-    "entered_paper_trades": 3,
-    "filtered_candidates": 240
+    "markets_checked": 0,
+    "candidates_detected": 0,
+    "entered_paper_trades": 0,
+    "filtered_candidates": 0
   },
   "trading": {
-    "closed_trades": 3,
-    "open_trades": 3,
+    "closed_trades": 0,
+    "open_trades": 0,
     "wins": 0,
-    "losses": 3,
+    "losses": 0,
     "win_rate_pct": 0.0,
-    "gross_pnl": -271.65,
-    "fees_and_slippage": 109.79,
-    "net_pnl": -381.45,
-    "ending_equity": 19475.71,
-    "max_drawdown_pct": 2.62
+    "gross_pnl": 0.0,
+    "fees_and_slippage": 0.0,
+    "net_pnl": 0.0,
+    "ending_equity": 20000.0,
+    "max_drawdown_pct": 0.0
   },
   "candidate_outcomes": {
     "reached_10pct": 0,
