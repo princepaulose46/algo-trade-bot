@@ -24,6 +24,40 @@ class UniverseFilterConfig:
     min_history_candles: int = 60
 
 
+STABLECOIN_BASES = {
+    "USDT", "USDC", "FDUSD", "TUSD", "BUSD", "DAI", "USDP", "AEUR", "EUR", "USD", "INR", "WBTC",
+}
+PEGGED_OR_ARBITRAGE_SYMBOLS = {
+    "USDTINR", "USDCINR", "USDCUSDT", "FDUSDUSDT", "TUSDUSDT",
+    "BUSDUSDT", "DAIUSDT", "USDPUSDT", "EURUSDT", "AEURUSDT",
+    "WBTCBTC", "ETHBTC", "B-USDC_USDT", "B-FDUSD_USDT", "B-TUSD_USDT",
+}
+
+
+def extract_base_asset(symbol: str) -> str:
+    """Extract clean underlying base coin ticker from any pair or instrument format."""
+    s = symbol.upper()
+    if s.startswith(("B-", "I-", "HB-", "H-")):
+        s = s.split("-", 1)[1]
+    if "_" in s:
+        return s.split("_")[0]
+    for quote in ("USDT", "USDC", "INR", "BTC", "ETH"):
+        if s.endswith(quote) and len(s) > len(quote):
+            return s[:-len(quote)]
+    return s
+
+
+def is_pegged_or_stablecoin(symbol: str) -> bool:
+    """Check if symbol is a stablecoin or currency peg unsuitable for momentum trading."""
+    sym_upper = symbol.upper()
+    if sym_upper in PEGGED_OR_ARBITRAGE_SYMBOLS:
+        return True
+    base = extract_base_asset(symbol)
+    if base in STABLECOIN_BASES:
+        return True
+    return False
+
+
 @dataclass
 class ExclusionRecord:
     symbol: str
@@ -54,6 +88,10 @@ class UniverseFilter:
 
         if symbol in self.config.symbols_blocklist:
             return False, "BLOCKLISTED", {"symbol": symbol}
+
+        # 2. Exclude pegged, stablecoin, and synthetic arbitrage pairs
+        if is_pegged_or_stablecoin(symbol):
+            return False, "PEGGED_OR_STABLECOIN", {"symbol": symbol}
 
         # 2. Market type separation (Section 5.1)
         detected_type = (

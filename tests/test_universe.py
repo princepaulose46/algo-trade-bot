@@ -101,6 +101,20 @@ class TestUniverseFilter(unittest.TestCase):
         self.assertEqual(reasons["BTCUSDT"], "MARKET_TYPE_MISMATCH")
         self.assertEqual(reasons["B-LOWVOL_USDT"], "INSUFFICIENT_VOLUME")
 
+    def test_stablecoin_and_pegged_exclusion(self):
+        # Even with high volume, stablecoins and fiat pegs must be excluded
+        meta = MarketMetadata("USDTINR", "spot", "USDT", "INR", "active")
+        ticker = {
+            "market": "USDTINR",
+            "last_price": 90.0,
+            "quote_volume": 10000000.0,
+            "bid": 89.9,
+            "ask": 90.1,
+        }
+        ok, reason, _ = self.filter.evaluate_market("USDTINR", ticker, meta, 100)
+        self.assertFalse(ok)
+        self.assertEqual(reason, "PEGGED_OR_STABLECOIN")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -8,6 +8,7 @@ from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
 from market.candles import Candle
+from market.universe import extract_base_asset
 from paper.sizing import PositionSizer, PositionSizingResult, SizingConfig
 
 logger = logging.getLogger("paper.engine")
@@ -209,7 +210,21 @@ class PaperEngine:
 
         is_short = (side.upper() == "SHORT")
 
-        # Calculate position sizing and guardrails
+        # 1. Enforce max concurrent paper trades (up to 4 active trades)
+        if len(self.open_trades) >= self.sizing_config.max_open_trades:
+            return None, "MAX_CONCURRENT_TRADES_REACHED"
+
+        # 2. Prevent duplicate base asset exposure (e.g. avoid opening both ETHINR and ETHUSDT)
+        new_base = extract_base_asset(symbol)
+        open_bases = {extract_base_asset(t.symbol) for t in self.open_trades.values()}
+        if new_base in open_bases:
+            return None, f"CORRELATED_ASSET_ALREADY_OPEN_{new_base}"
+
+        # 3. Calculate remaining available capital
+        current_open_notional = sum(t.notional for t in self.open_trades.values())
+        remaining_capital = max(0.0, self.current_equity - current_open_notional)
+
+        # 4. Calculate position sizing (max 25% of capital or remaining amount)
         sizing = self.sizer.calculate_sizing(
             equity=self.current_equity,
             entry_price=entry_price,
@@ -218,6 +233,7 @@ class PaperEngine:
             daily_loss_accumulated=self.daily_loss_accumulated,
             start_of_day_equity=self.start_of_day_equity,
             side=side,
+            remaining_capital=remaining_capital,
             market_min_qty=market_min_qty,
             qty_step=qty_step,
         )
@@ -225,7 +241,7 @@ class PaperEngine:
         if not sizing.valid:
             return None, sizing.reason
 
-        # Initial target: target_r_multiple * risk
+        # Initial target: 1:2 Risk to Reward (target_r_multiple = 2.0)
         risk_per_unit = (stop_price - entry_price) if is_short else (entry_price - stop_price)
         if is_short:
             target_price = entry_price - (self.target_r_multiple * risk_per_unit)
@@ -438,12 +454,24 @@ class PaperEngine:
 
     def reload_open_trades(self, trades: List[PaperTrade]) -> None:
         """Restore active trades upon restart without duplicates."""
+        latest_map: Dict[str, PaperTrade] = {}
         for trade in trades:
+            latest_map[trade.trade_id] = trade
+
+        self.open_trades.clear()
+        self.closed_trades.clear()
+
+        for tid, trade in latest_map.items():
             if trade.status == "OPEN":
                 self.open_trades[trade.trade_id] = trade
                 logger.info("Reloaded open trade %s on %s", trade.trade_id, trade.symbol)
             else:
                 self.closed_trades.append(trade)
+
+        # Restore equity reflecting all closed trade outcomes
+        total_closed_pnl = sum(t.net_pnl or 0.0 for t in self.closed_trades)
+        self.current_equity = round(self.sizing_config.starting_equity + total_closed_pnl, 2)
+
         # Update counter to avoid ID collision
         max_id = 0
         for t in trades:

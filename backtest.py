@@ -62,9 +62,10 @@ class BacktestRunner:
         sizing_cfg = SizingConfig(
             starting_equity=self.starting_equity,
             risk_fraction=float(p_cfg.get("risk_fraction", 0.005)),
-            max_open_trades=int(p_cfg.get("max_open_trades", 3)),
-            max_daily_loss_fraction=float(p_cfg.get("max_daily_loss_fraction", 0.01)),
+            max_open_trades=int(p_cfg.get("max_open_trades", 4)),
+            max_daily_loss_fraction=float(p_cfg.get("max_daily_loss_fraction", 0.02)),
             max_notional_fraction_equity=float(p_cfg.get("max_notional_fraction_equity", 1.0)),
+            max_trade_fraction_equity=float(p_cfg.get("max_trade_fraction_equity", 0.25)),
             fee_rate_per_side=float(c_cfg.get("fee_rate_per_side", 0.001)),
             slippage_bps_per_side=float(c_cfg.get("slippage_bps_per_side", 5.0)),
         )

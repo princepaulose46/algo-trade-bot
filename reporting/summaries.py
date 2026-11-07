@@ -42,13 +42,18 @@ class SummaryGenerator:
         reached_20pct = sum(1 for c in daily_candidates if c.get("reached_20pct") is True)
         reached_50pct = sum(1 for c in daily_candidates if c.get("reached_50pct") is True)
 
-        # Trading metrics
-        open_trades_count = sum(1 for t in trades if t.get("status") == "OPEN")
+        # Trading metrics (deduplicated by trade_id to obtain true current state)
+        latest_trades_map: Dict[str, Dict[str, Any]] = {}
+        for idx, t in enumerate(trades):
+            tid = t.get("trade_id") or f"anon_{idx}"
+            latest_trades_map[tid] = t
+
+        open_trades_count = sum(1 for t in latest_trades_map.values() if t.get("status") == "OPEN")
 
         # Closed trades exited on date_utc or overall
         daily_closed_trades = [
             t
-            for t in trades
+            for t in latest_trades_map.values()
             if t.get("status") == "CLOSED"
             and (t.get("exit_at") or "").startswith(date_utc)
         ]
@@ -110,7 +115,12 @@ class SummaryGenerator:
         candidates: List[Dict[str, Any]],
     ) -> Dict[str, Any]:
         """Generate weekly summary analyzing performance by symbol, signal variant, and continuation."""
-        closed = [t for t in trades if t.get("status") == "CLOSED"]
+        latest_trades_map: Dict[str, Dict[str, Any]] = {}
+        for idx, t in enumerate(trades):
+            tid = t.get("trade_id") or f"anon_{idx}"
+            latest_trades_map[tid] = t
+
+        closed = [t for t in latest_trades_map.values() if t.get("status") == "CLOSED"]
         total_closed = len(closed)
 
         total_gross = sum(float(t.get("gross_pnl") or 0.0) for t in closed)

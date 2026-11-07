@@ -97,6 +97,7 @@ class SignalEvaluator:
         # 2. Indicators computation
         ema20 = calculate_ema(prices, period=20)
         ema50 = calculate_ema(prices, period=50)
+        prev_ema20 = calculate_ema(prices[:-1], period=20) if len(prices) > 20 else ema20
         rsi = calculate_rsi(prices, period=14)
         vwap = calculate_vwap(candles, max_candles=96)
         atr = calculate_atr(candles, period=14) or (close * 0.01)
@@ -113,6 +114,21 @@ class SignalEvaluator:
         metrics["vwap"] = vwap
         metrics["atr"] = atr
         metrics["rvol"] = rvol
+
+        # 3. Anti-chop filter: Reject flat, entangled moving averages
+        if ema20 is not None and ema50 is not None and ema50 > 0:
+            ema_sep_pct = abs(ema20 - ema50) / ema50 * 100.0
+            metrics["ema_separation_pct"] = round(ema_sep_pct, 3)
+            if ema_sep_pct < 0.15:
+                return SignalResult(
+                    confirmed=False,
+                    signal_type="trend_pullback_v2",
+                    entry_price=close,
+                    stop_price=0.0,
+                    side="LONG",
+                    reason="MARKET_IN_CHOP_ZONE",
+                    metrics=metrics,
+                )
 
         if ema50 is not None and ema50 > 0:
             ema_dist = abs((close - ema50) / ema50) * 100.0
@@ -137,8 +153,9 @@ class SignalEvaluator:
         # ==========================================
         is_bullish_regime = (
             ema50 is not None
-            and close >= ema50 * 0.99
-            and (ema20 is None or ema20 >= ema50 * 0.995 or (vwap and close >= vwap))
+            and close >= ema50 * 0.995
+            and (ema20 is None or ema20 >= ema50 * 0.998)
+            and (prev_ema20 is None or ema20 >= prev_ema20 * 0.999)
         )
 
         if is_bullish_regime and rsi is not None:
@@ -151,9 +168,12 @@ class SignalEvaluator:
             rsi_pullback_zone = 42.0 <= rsi <= 68.0
 
             if touched_support and bullish_candle and rsi_pullback_zone and rvol >= 0.7:
-                stop_price = min(close - (1.2 * atr), swing_low - (0.2 * atr))
+                # Stop loss placed below swing low or ATR buffer (min 1.5% distance for crypto noise)
+                stop_buffer = max(close * 0.015, 1.8 * atr)
+                candidate_stop = min(close - stop_buffer, swing_low - (0.2 * atr))
+                stop_price = max(candidate_stop, close * 0.95)
                 stop_dist_pct = ((close - stop_price) / close) * 100.0
-                if 0.3 <= stop_dist_pct <= 7.0:
+                if 1.4 <= stop_dist_pct <= 5.5:
                     return SignalResult(
                         confirmed=True,
                         signal_type="trend_pullback_v2",
@@ -166,9 +186,11 @@ class SignalEvaluator:
             # Check B: Local Range Breakout
             if range_high is not None and (latest.close >= range_high or latest.high >= range_high):
                 if latest.close > latest.open and rsi >= 50.0 and rvol >= 1.1:
-                    stop_price = min(close - (1.2 * atr), swing_low - (0.2 * atr))
+                    stop_buffer = max(close * 0.015, 1.8 * atr)
+                    candidate_stop = min(close - stop_buffer, swing_low - (0.2 * atr))
+                    stop_price = max(candidate_stop, close * 0.95)
                     stop_dist_pct = ((close - stop_price) / close) * 100.0
-                    if 0.3 <= stop_dist_pct <= 7.0:
+                    if 1.4 <= stop_dist_pct <= 5.5:
                         return SignalResult(
                             confirmed=True,
                             signal_type="momentum_breakout_v2",
@@ -184,8 +206,9 @@ class SignalEvaluator:
         is_bearish_regime = (
             allow_shorts
             and ema50 is not None
-            and close <= ema50 * 1.01
-            and (ema20 is None or ema20 <= ema50 * 1.005 or (vwap and close <= vwap))
+            and close <= ema50 * 1.005
+            and (ema20 is None or ema20 <= ema50 * 1.002)
+            and (prev_ema20 is None or ema20 <= prev_ema20 * 1.001)
         )
 
         if is_bearish_regime and rsi is not None:
@@ -198,9 +221,12 @@ class SignalEvaluator:
             rsi_short_zone = 32.0 <= rsi <= 58.0
 
             if touched_resistance and bearish_candle and rsi_short_zone and rvol >= 0.7:
-                stop_price = max(close + (1.2 * atr), swing_high + (0.2 * atr))
+                # Stop loss placed above swing high or ATR buffer (min 1.5% distance for crypto noise)
+                stop_buffer = max(close * 0.015, 1.8 * atr)
+                candidate_stop = max(close + stop_buffer, swing_high + (0.2 * atr))
+                stop_price = min(candidate_stop, close * 1.05)
                 stop_dist_pct = ((stop_price - close) / close) * 100.0
-                if 0.3 <= stop_dist_pct <= 7.0:
+                if 1.4 <= stop_dist_pct <= 5.5:
                     return SignalResult(
                         confirmed=True,
                         signal_type="trend_pullback_v2",
@@ -213,9 +239,11 @@ class SignalEvaluator:
             # Check B: Local Range Breakdown
             if range_low is not None and (latest.close <= range_low or latest.low <= range_low):
                 if latest.close < latest.open and rsi <= 50.0 and rvol >= 1.1:
-                    stop_price = max(close + (1.2 * atr), swing_high + (0.2 * atr))
+                    stop_buffer = max(close * 0.015, 1.8 * atr)
+                    candidate_stop = max(close + stop_buffer, swing_high + (0.2 * atr))
+                    stop_price = min(candidate_stop, close * 1.05)
                     stop_dist_pct = ((stop_price - close) / close) * 100.0
-                    if 0.3 <= stop_dist_pct <= 7.0:
+                    if 1.4 <= stop_dist_pct <= 5.5:
                         return SignalResult(
                             confirmed=True,
                             signal_type="momentum_breakout_v2",

@@ -8,7 +8,7 @@ universe:
   min_quote_volume_24h: 20000
   max_spread_pct: 0.60
   symbols_allowlist: []
-  symbols_blocklist: []
+  symbols_blocklist: ["USDTINR", "USDCINR", "USDCUSDT", "FDUSDUSDT", "TUSDUSDT", "EURUSDT", "WBTCBTC", "B-USDC_USDT", "B-FDUSD_USDT"]
   min_history_candles: 55
 
 scanner:
@@ -28,10 +28,11 @@ paper:
   starting_equity_inr: 20000.0
   risk_fraction: 0.005
   max_open_trades: 4
-  max_daily_loss_fraction: 0.015
+  max_daily_loss_fraction: 0.02
   max_notional_fraction_equity: 1.0
+  max_trade_fraction_equity: 0.25 # Maximum 25% of capital per single trade
   simulated_leverage: 1
-  target_r_multiple: 1.5
+  target_r_multiple: 2.0 # 1:2 Risk to Reward ratio
   max_holding_hours: 24
   trailing_stop_enabled: true
   trailing_stop_activation_r: 1.0
